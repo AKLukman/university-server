@@ -4,6 +4,7 @@ import { UserControllers } from './user.controller'
 import validationRequest from '../../middlewares/validationRequest'
 import { UserValidation } from './user.validation'
 import { createAdminValidationSchema } from '../admin/admin.validation'
+import { createFacultyValidationSchema } from '../faculty/faculty.validation'
 
 const router = express.Router()
 
@@ -17,13 +18,13 @@ router.post(
 router.post(
   '/create-faculty',
 
-  // validateRequest(createFacultyValidationSchema),
+  validationRequest(createFacultyValidationSchema),
   UserControllers.createFaculty,
 )
 
 router.post(
   '/create-admin',
-  // auth(USER_ROLE.admin),
+
   validationRequest(createAdminValidationSchema),
   UserControllers.createAdmin,
 )

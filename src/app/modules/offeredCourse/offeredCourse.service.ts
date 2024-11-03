@@ -122,7 +122,7 @@ const updateOfferedCourse = async (
   if (semesterRegistrationStatus?.status !== 'UPCOMING') {
     throw new AppError(
       httpStatus.CONFLICT,
-      `You can not update update this offered course as it is ${semesterRegistrationStatus.status}`,
+      `You can not update update this offered course as it is ${semesterRegistrationStatus?.status}`,
     )
   }
 
