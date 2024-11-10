@@ -18,8 +18,14 @@ import { AcademicDepartment } from '../academicDepartment/academicDepartment.mod
 import { Faculty } from '../faculty/faculty.model'
 import { Admin } from '../admin/admin.model'
 import { TAdmin } from '../admin/admin.interface'
+import { JwtPayload } from 'jsonwebtoken'
+import { imageUploadToCloudinary } from '../../utils/imageUloadToCloudinary'
 
-const createStudentIntoDB = async (password: string, payload: TStudent) => {
+const createStudentIntoDB = async (
+  password: string,
+  payload: TStudent,
+  file: any,
+) => {
   // create a user object
   const userData: Partial<TUser> = {}
 
@@ -46,6 +52,12 @@ const createStudentIntoDB = async (password: string, payload: TStudent) => {
     //set  generated id
     userData.id = await generateStudentId(admissionSemester)
 
+    const imageName = `${userData.id}-${payload?.name?.firstName}`
+    const path = file?.path
+
+    // upload image to cloudinary
+    const { secure_url } = await imageUploadToCloudinary(path, imageName)
+
     // create a user (transaction-1)
     const newUser = await User.create([userData], { session }) // array
 
@@ -56,6 +68,7 @@ const createStudentIntoDB = async (password: string, payload: TStudent) => {
     // set id , _id as user
     payload.id = newUser[0].id
     payload.user = newUser[0]._id //reference _id
+    payload.profileImage = secure_url
 
     // create a student (transaction-2)
 
@@ -179,9 +192,27 @@ const createAdminIntoDB = async (password: string, payload: TAdmin) => {
     throw new Error(err)
   }
 }
+const getMe = async (user: JwtPayload) => {
+  const { userId, role } = user
+  let result = null
 
+  if (role === 'admin') {
+    result = await Admin.findOne({ id: userId })
+  } else if (role === 'faculty') {
+    result = await Faculty.findOne({ id: userId })
+  } else if (role === 'student') {
+    result = await Student.findOne({ id: userId })
+  }
+  return result
+}
+const changeUserStatus = async (id: string, payload: { status: string }) => {
+  const result = await User.findByIdAndUpdate(id, payload, { new: true })
+  return result
+}
 export const UserServices = {
   createStudentIntoDB,
   createFacultyIntoDB,
   createAdminIntoDB,
+  getMe,
+  changeUserStatus,
 }

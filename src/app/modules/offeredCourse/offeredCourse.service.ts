@@ -148,7 +148,13 @@ const updateOfferedCourse = async (
   })
   return result
 }
+
+const getAllOfferedCourse = async () => {
+  const result = await OfferedCourse.find()
+  return result
+}
 export const OfferedCourseServices = {
   createOfferedCourse,
   updateOfferedCourse,
+  getAllOfferedCourse,
 }
