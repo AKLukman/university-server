@@ -2,12 +2,14 @@ import { Server } from 'http'
 import app from './app'
 import config from './config'
 import mongoose from 'mongoose'
+import seedSuperAdmin from './DB'
 
 let server: Server
 
 async function main() {
   try {
     await mongoose.connect(config.database_url as string)
+    seedSuperAdmin()
 
     // use `await mongoose.connect('mongodb://user:password@127.0.0.1:27017/test');` if your database has auth enabled
     server = app.listen(config.port, () => {
