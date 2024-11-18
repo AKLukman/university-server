@@ -4,8 +4,9 @@ import AppError from '../../error/AppError'
 import httpStatus from 'http-status'
 import { User } from '../user/user.model'
 import { TStudent } from './student.interface'
-import QueryBuilder from '../../builder/queryBuilder'
+
 import { studentSearchableFields } from './student.constant'
+import QueryBuilder from '../../builder/queryBuilder'
 
 const getStudentsFromDb = async (query: Record<string, unknown>) => {
   // const queryObject = { ...query } //copy of query
@@ -74,7 +75,8 @@ const getStudentsFromDb = async (query: Record<string, unknown>) => {
     .fields()
 
   const result = await studentQuery.modelQuery
-  return result
+  const meta = await studentQuery.countTotal()
+  return { result, meta }
 }
 const getAStudent = async (id: string) => {
   const result = await Student.findById(id)

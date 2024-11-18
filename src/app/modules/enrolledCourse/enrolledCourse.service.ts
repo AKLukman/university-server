@@ -6,6 +6,10 @@ import httpStatus from 'http-status'
 import EnrolledCourse from './enrolledCourse.model'
 import { Student } from '../student/student.model'
 import mongoose from 'mongoose'
+import { SemesterReagistration } from '../semesterRegistration/semesterRegistration.model'
+import { Course } from '../course/course.model'
+import { Faculty } from '../faculty/faculty.model'
+import { calculateGradePoints } from './enrolledCourse.utils'
 
 const createEnrolledCourse = async (
   userId: string,
@@ -21,7 +25,7 @@ const createEnrolledCourse = async (
   if (isOfferedCourseExists.maxCapacity <= 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'Room is full!')
   }
-  const student = await Student.findOne({ id: userId }).select('id')
+  const student = await Student.findOne({ id: userId }, { _id: 1 })
   if (!student) {
     throw new AppError(httpStatus.NOT_FOUND, 'Student not found!')
   }
@@ -34,6 +38,55 @@ const createEnrolledCourse = async (
     throw new AppError(httpStatus.CONFLICT, 'This student already enrolled!')
   }
 
+  //   check max credits
+  const semesterRegistration = await SemesterReagistration.findById(
+    isOfferedCourseExists.semeterRegistration,
+  ).select('maxCredit')
+  const course = await Course.findById(isOfferedCourseExists.course)
+
+  const enrolledCourses = await EnrolledCourse.aggregate([
+    {
+      $match: {
+        semeterRegistration: isOfferedCourseExists.semeterRegistration,
+        student: student._id,
+      },
+    },
+    {
+      $lookup: {
+        from: 'courses',
+        localField: 'course',
+        foreignField: '_id',
+        as: 'enrolledCourseData',
+      },
+    },
+    {
+      $unwind: 'enrolledCourseData',
+    },
+    {
+      $group: {
+        _id: null,
+        totalEnrolledCredits: { $sum: '$enrolledCourseData.credits' },
+      },
+    },
+    {
+      $project: {
+        _id: null,
+        totalEnrolledCredits: 1,
+      },
+    },
+  ])
+  const totalCredits =
+    enrolledCourses.length > 0 ? enrolledCourses[0].totalEnrolledCredits : 0
+  if (
+    totalCredits &&
+    semesterRegistration?.maxCredit &&
+    totalCredits + course?.credits > semesterRegistration?.maxCredit
+  ) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      'You have exceed maximum number of credits',
+    )
+  }
   const session = await mongoose.startSession()
 
   try {
@@ -73,5 +126,76 @@ const createEnrolledCourse = async (
     throw new Error(err)
   }
 }
+const updateCourseMarks = async (
+  facultyId: string,
+  paylod: Partial<TEnrolledCourse>,
+) => {
+  const { semeterRegistration, courseMarks, student, offeredCourse } = paylod
 
-export const EnrolledCourseServices = { createEnrolledCourse }
+  const isSemesterRegistrationExits =
+    await SemesterReagistration.findById(semeterRegistration)
+  if (!isSemesterRegistrationExits) {
+    throw new AppError(httpStatus.BAD_REQUEST, "This semester doesn't exitss!")
+  }
+  const isOfferedCourseExits = await OfferedCourse.findById(offeredCourse)
+  if (!isOfferedCourseExits) {
+    throw new AppError(
+      httpStatus.BAD_REQUEST,
+      "This offered course doesn't exitss!",
+    )
+  }
+  const isStudentExits = await Student.findById(student)
+  if (!isStudentExits) {
+    throw new AppError(httpStatus.BAD_REQUEST, "This student doesn't exitss!")
+  }
+  const faculty = await Faculty.findOne({ id: facultyId }, { _id: 1 })
+  if (!faculty) {
+    throw new AppError(httpStatus.BAD_REQUEST, "This faculty doesn't exitss!")
+  }
+  const isCoursBelongsToFaculty = await EnrolledCourse.findOne({
+    semeterRegistration,
+    offeredCourse,
+    student,
+    faculty: faculty._id,
+  })
+  if (!isCoursBelongsToFaculty) {
+    throw new AppError(httpStatus.FORBIDDEN, 'You are not authorized!')
+  }
+  const modifiedData: Record<string, unknown> = {
+    ...courseMarks,
+  }
+
+  if (courseMarks?.finalTerm) {
+    const { classTest1, classTest2, midTerm, finalTerm } =
+      isCoursBelongsToFaculty.courseMarks
+    const totalMarks =
+      Math.ceil(classTest1 * 0.1) +
+      Math.ceil(midTerm * 0.3) +
+      Math.ceil(classTest2 * 0.1) +
+      Math.ceil(finalTerm * 0.5)
+    console.log(totalMarks)
+    const result = calculateGradePoints(totalMarks)
+    modifiedData.grade = result.grade
+    modifiedData.gradePoints = result.gradePoints
+    modifiedData.isCompleted = true
+  }
+
+  if (courseMarks && Object.keys(courseMarks).length) {
+    for (const [key, value] of Object.entries(courseMarks)) {
+      modifiedData[`courseMarks.${key}`] = value
+    }
+  }
+  const result = await EnrolledCourse.findByIdAndUpdate(
+    isCoursBelongsToFaculty._id,
+    modifiedData,
+    {
+      new: true,
+    },
+  )
+  return result
+}
+
+export const EnrolledCourseServices = {
+  createEnrolledCourse,
+  updateCourseMarks,
+}
